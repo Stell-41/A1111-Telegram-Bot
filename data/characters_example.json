@@ -1,0 +1,62 @@
+{
+  "CyberSamurai": {
+    "name": "Кибер-самурай Кендзи  cyberpunk",
+    "mandatory_tags": [
+      "1boy",
+      "cyber samurai",
+      "glowing katana",
+      "<lora:cyberpunk_style:0.7>"
+    ],
+    "poses": [
+      "standing",
+      "crouching",
+      "sword draw"
+    ],
+    "environments": [
+      "in a neon-lit alley",
+      "on a skyscraper roof",
+      "inside a futuristic dojo"
+    ],
+    "optional_categories": {
+      "armor_color": [
+        "black armor",
+        "red armor",
+        "white armor"
+      ],
+      "helmet": [
+        "wearing a helmet",
+        "no helmet"
+      ]
+    }
+  },
+  "ForestElf": {
+    "name": "Лесная эльфийка Лиара",
+    "mandatory_tags": [
+      "1girl",
+      "elf",
+      "pointy ears",
+      "long silver hair"
+    ],
+    "poses": [
+      "holding a bow",
+      "sitting on a mossy rock",
+      "looking at viewer"
+    ],
+    "environments": [
+      "in an enchanted forest",
+      "near a waterfall",
+      "in a sunlit clearing"
+    ],
+    "optional_categories": {
+      "outfit": [
+        "green leather tunic",
+        "flowing white dress"
+      ],
+      "expression": [
+        "serene smile",
+        "serious expression",
+        "curious look"
+      ]
+    }
+  }
+}
