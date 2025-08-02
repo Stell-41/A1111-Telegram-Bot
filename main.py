@@ -14,6 +14,7 @@ except ImportError:
     sys.exit(1)
 
 from bot.handlers import user_handlers, admin_handlers
+from bot.middleware import SubscriptionMiddleware # <-- Импортируем Middleware
 
 async def main():
     # Настройка логирования для отладки
@@ -23,13 +24,14 @@ async def main():
     )
 
     # Инициализация бота и диспетчера
-    # Используем MemoryStorage, так как он прост и не требует внешних зависимостей.
-    # Для более серьезных проектов можно использовать RedisStorage.
     dp = Dispatcher(storage=MemoryStorage())
     bot = Bot(token=config.BOT_TOKEN)
 
-    # Регистрация роутеров. Роутер админа должен идти первым,
-    # так как он содержит более специфичные фильтры.
+    # Регистрируем Middleware для проверки подписки
+    # Этот обработчик будет срабатывать на каждое входящее событие
+    dp.update.middleware(SubscriptionMiddleware())
+
+    # Регистрация роутеров. Роутер админа должен идти первым
     dp.include_router(admin_handlers.router)
     dp.include_router(user_handlers.router)
     

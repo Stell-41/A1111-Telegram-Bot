@@ -5,11 +5,20 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile
 
 from bot.states import GenerateFlow
-from bot.keyboards import get_character_keyboard, get_generation_keyboard
+from bot.keyboards import get_character_keyboard, get_generation_keyboard, get_settings_keyboard
 from services.prompt_logic import generate_prompts_for_character
 from services.a1111_api_service import generate_image
 
 router = Router()
+
+# Настройки генерации по умолчанию
+DEFAULT_SETTINGS = {
+    "steps": 25,
+    "cfg_scale": 7.0,
+    "width": 512,
+    "height": 768,
+    "sampler_name": "DPM++ 2M Karras"
+}
 
 def format_prompt_message(prompts: list, index: int) -> str:
     """Форматирует сообщение с позитивным и негативным промтом."""
@@ -36,10 +45,59 @@ async def cmd_generate(message: types.Message, state: FSMContext):
 @router.callback_query(GenerateFlow.choosing_character, F.data.startswith("select_char_"))
 async def select_character(callback: types.CallbackQuery, state: FSMContext):
     character_id = callback.data.split("_")[2]
-    await state.update_data(character_id=character_id)
+    
+    # Сохраняем ID персонажа и настройки по умолчанию в состояние
+    await state.update_data(character_id=character_id, settings=DEFAULT_SETTINGS.copy())
+    
+    # Меняем состояние и показываем меню настроек
     await state.set_state(GenerateFlow.waiting_for_base_prompt)
+    await callback.message.edit_text(
+        "Настройки генерации. Вы можете изменить их или нажать 'Готово' и сразу ввести базовый промт.",
+        reply_markup=get_settings_keyboard(DEFAULT_SETTINGS)
+    )
+    await callback.answer()
+
+@router.callback_query(GenerateFlow.waiting_for_base_prompt, F.data == "settings_done")
+async def settings_done(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик для кнопки 'Готово' в меню настроек."""
     await callback.message.edit_text("Отлично! Теперь введите базовый промт (например, `masterpiece, best quality`):")
     await callback.answer()
+
+@router.callback_query(GenerateFlow.waiting_for_base_prompt, F.data.startswith("edit_setting_"))
+async def edit_setting(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик для кнопок редактирования настроек."""
+    setting_key = callback.data.split("_")[-1]
+    await state.update_data(editing_setting=setting_key)
+    await state.set_state(GenerateFlow.waiting_for_setting_value)
+    
+    await callback.message.edit_text(f"Введите новое значение для **{setting_key}**:", parse_mode="Markdown")
+    await callback.answer()
+
+@router.message(GenerateFlow.waiting_for_setting_value)
+async def enter_setting_value(message: types.Message, state: FSMContext):
+    """Получает новое значение для настройки от пользователя."""
+    user_data = await state.get_data()
+    setting_key = user_data.get("editing_setting")
+    new_value = message.text
+
+    try:
+        if setting_key in ["steps", "width", "height"]:
+            new_value = int(new_value)
+        elif setting_key == "cfg_scale":
+            new_value = float(new_value)
+    except ValueError:
+        await message.answer("Ошибка формата. Пожалуйста, введите число.")
+        return
+
+    settings = user_data.get("settings")
+    settings[setting_key] = new_value
+    await state.update_data(settings=settings)
+    
+    await state.set_state(GenerateFlow.waiting_for_base_prompt)
+    await message.answer(
+        "Настройка обновлена. Можете изменить что-то еще или нажать 'Готово'.",
+        reply_markup=get_settings_keyboard(settings)
+    )
 
 @router.message(GenerateFlow.waiting_for_base_prompt)
 async def enter_base_prompt(message: types.Message, state: FSMContext):
@@ -78,16 +136,16 @@ async def navigate_prompts(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(GenerateFlow.viewing_results, F.data.startswith("generate_img_"))
 async def generate_image_callback(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.edit_text("⏳ Ваше изображение генерируется... Это может занять несколько минут.")
+    await callback.message.edit_text("⏳ Ваше изображение генерируется...", reply_markup=None)
     
     user_data = await state.get_data()
     prompts = user_data["prompts"]
+    settings = user_data["settings"]
     index = int(callback.data.split("_")[2])
     positive_prompt, negative_prompt = prompts[index]
 
-    image_bytes = generate_image(positive_prompt, negative_prompt)
+    image_bytes = generate_image(positive_prompt, negative_prompt, settings)
     
-    # Возвращаем исходное сообщение с навигацией
     await callback.message.edit_text(
         format_prompt_message(prompts, index),
         parse_mode="Markdown",

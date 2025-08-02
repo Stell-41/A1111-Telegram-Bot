@@ -2,35 +2,34 @@
 import requests
 import base64
 import config
-from typing import Optional, Tuple
+from typing import Optional
 
-def generate_image(positive_prompt: str, negative_prompt: str) -> Optional[bytes]:
+def generate_image(positive_prompt: str, negative_prompt: str, settings: dict) -> Optional[bytes]:
     """
-    Отправляет запрос на генерацию изображения в Automatic1111 API.
-    Возвращает изображение в виде байтов или None в случае ошибки.
+    Отправляет запрос на генерацию изображения в Automatic1111 API,
+    используя переданные настройки.
     """
     api_url = f"{config.A1111_API_URL}/sdapi/v1/txt2img"
     
-    # Основные параметры для генерации. Их можно вынести в конфиг или дать настраивать пользователю.
+    # Payload формируется на основе переданных настроек.
+    # .get() используется для безопасного получения значений с указанием умолчаний.
     payload = {
         "prompt": positive_prompt,
         "negative_prompt": negative_prompt,
-        "steps": 25,
-        "sampler_name": "DPM++ 2M Karras",
-        "cfg_scale": 7,
-        "width": 512,
-        "height": 768,
+        "steps": int(settings.get("steps", 25)),
+        "sampler_name": settings.get("sampler_name", "DPM++ 2M Karras"),
+        "cfg_scale": float(settings.get("cfg_scale", 7.0)),
+        "width": int(settings.get("width", 512)),
+        "height": int(settings.get("height", 768)),
+        "save_images": True  # Сохраняем изображение на ПК
     }
 
     try:
-        # Отправляем POST-запрос с таймаутом (например, 5 минут)
         response = requests.post(url=api_url, json=payload, timeout=300)
-        # Проверяем, что запрос успешен (код 200)
         response.raise_for_status()
         
         r = response.json()
         
-        # Декодируем изображение из формата base64
         if 'images' in r and r['images']:
             image_data = base64.b64decode(r['images'][0])
             return image_data
