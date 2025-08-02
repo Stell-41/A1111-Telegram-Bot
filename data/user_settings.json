@@ -1,0 +1,20 @@
+{
+  "945912237": {
+    "steps": 40,
+    "cfg_scale": 6.0,
+    "width": 512,
+    "height": 512,
+    "sampler_name": "Euler a",
+    "name": "/",
+    "model_name": "v1-5-pruned-emaonly",
+    "settings": {
+      "steps": 25,
+      "cfg_scale": 7.0,
+      "width": 512,
+      "height": 768,
+      "sampler_name": "DPM++ 2M Karras",
+      "model_name": "v1-5-pruned-emaonly"
+    },
+    "saved_prompts": []
+  }
+}

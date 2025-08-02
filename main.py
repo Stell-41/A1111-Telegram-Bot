@@ -14,7 +14,7 @@ except ImportError:
     sys.exit(1)
 
 from bot.handlers import user_handlers, admin_handlers
-from bot.middleware import SubscriptionMiddleware # <-- Импортируем Middleware
+from bot.middleware import AccessMiddleware # <-- Обновлено название Middleware
 
 async def main():
     # Настройка логирования для отладки
@@ -27,9 +27,9 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
     bot = Bot(token=config.BOT_TOKEN)
 
-    # Регистрируем Middleware для проверки подписки
-    # Этот обработчик будет срабатывать на каждое входящее событие
-    dp.update.middleware(SubscriptionMiddleware())
+    # Регистрируем наш обновленный Middleware
+    # Он будет применяться ко всем сообщениям и колбэкам
+    dp.update.middleware(AccessMiddleware())
 
     # Регистрация роутеров. Роутер админа должен идти первым
     dp.include_router(admin_handlers.router)

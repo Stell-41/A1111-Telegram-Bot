@@ -2,71 +2,103 @@
 import json
 from itertools import product
 from typing import List, Dict, Any, Tuple
+from pathlib import Path
 
-DATA_FILE_PATH = "data/characters.json"
+# --- Определяем абсолютные пути к правильным файлам ---
+BASE_DIR = Path(__file__).parent.parent
+DATA_FILE_PATH = BASE_DIR / "data" / "characters.json"
+EXAMPLE_DATA_FILE_PATH = BASE_DIR / "data" / "characters_example.json"
+
 
 def load_character_data() -> Dict[str, Any]:
     """Загружает данные о персонажах из JSON-файла."""
+    # Загружаем основной файл
     try:
-        # Пробуем загрузить основной файл. Если его нет, используем пример.
         with open(DATA_FILE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        with open("data/characters_example.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        return {}
-
-def save_character_data(data: Dict[str, Any]):
-    """Сохраняет данные о персонажах в JSON-файл."""
-    with open(DATA_FILE_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-def generate_prompts_for_character(character_id: str, base_prompt: str) -> List[Tuple[str, str]]:
+            # Сразу получаем словарь персонажей
+            return json.load(f).get("characters", {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        # Если не получилось, загружаем пример
+        try:
+            with open(EXAMPLE_DATA_FILE_PATH, "r", encoding="utf-8") as f:
+                # Сразу получаем словарь персонажей
+                return json.load(f).get("characters", {})
+        except (FileNotFoundError, json.JSONDecodeError):
+            print(f"!!! ВНИМАНИЕ: Не удалось загрузить файлы персонажей. Возвращены пустые данные.")
+            return {}
+        
+# --- НОВАЯ ФУНКЦИЯ ГЕНЕРАЦИИ ДЛЯ НЕСКОЛЬКИХ ПЕРСОНАЖЕЙ ---
+def generate_prompts_for_characters(character_ids: List[str], base_prompt: str) -> List[Tuple[str, str]]:
     """
-    Генерирует все возможные комбинации промтов для выбранного персонажа.
+    Генерирует комбинации для списка персонажей, объединяя их теги.
     """
     all_characters = load_character_data()
-    char_data = all_characters.get(character_id)
+    selected_chars_data = [all_characters.get(cid) for cid in character_ids if cid in all_characters]
 
-    if not char_data:
+    if not selected_chars_data:
         return []
 
-    # Собираем все опциональные теги в один набор для последующего вычисления negative prompt
-    all_optional_tags = set(char_data.get("poses", []))
-    all_optional_tags.update(char_data.get("environments", []))
-    
-    # Собираем списки для комбинаторики
-    combinatorics_lists = [
-        char_data.get("poses") or [""],  # Если список пуст, добавляем пустую строку, чтобы комбинаторика не ломалась
-        char_data.get("environments") or [""]
-    ]
-    
-    optional_categories = char_data.get("optional_categories", {})
-    for category, tags in optional_categories.items():
-        all_optional_tags.update(tags)
-        combinatorics_lists.append(tags)
+    # 1. Объединяем все теги от всех персонажей
+    final_mandatory_tags = []
+    all_optional_tags_set = set()
+    combinatorics_lists = []
 
-    # Генерируем все возможные комбинации с помощью itertools.product
-    all_combinations = list(product(*combinatorics_lists))
+    for char_data in selected_chars_data:
+        final_mandatory_tags.extend(char_data.get("mandatory_tags", []))
+        
+        for category, tags in char_data.get("optional_categories", {}).items():
+            if tags:
+                all_optional_tags_set.update(tags)
+                combinatorics_lists.append(tags + [""])
+        
+        poses = char_data.get("poses", [])
+        if poses:
+            all_optional_tags_set.update(poses)
+            combinatorics_lists.append(poses + [""])
+
+        environments = char_data.get("environments", [])
+        if environments:
+            all_optional_tags_set.update(environments)
+            combinatorics_lists.append(environments + [""])
+
+    # 2. Генерируем комбинации
     generated_prompts = []
+    
+    if not combinatorics_lists:
+        # Добавляем тег о количестве персонажей, если их больше одного
+        if len(selected_chars_data) > 1:
+            base_prompt = f"{len(selected_chars_data)}girls, " + base_prompt
+        
+        positive_parts = [base_prompt] + final_mandatory_tags
+        positive_prompt = ", ".join(filter(None, positive_parts))
+        generated_prompts.append((positive_prompt, ""))
+        return generated_prompts
+    
+    all_combinations = list(product(*combinatorics_lists))
 
     for combo in all_combinations:
-        # Теги, которые попали в эту конкретную генерацию
         current_tags_set = {tag for tag in combo if tag}
         
-        # --- Собираем POSITIVE prompt ---
-        positive_parts = [base_prompt]
-        positive_parts.extend(char_data.get("mandatory_tags", []))
-        positive_parts.extend(list(current_tags_set))
-        
-        # Объединяем теги, удаляя пустые строки, если они были
+        # Модифицируем базовый промт, если персонажей несколько
+        current_base_prompt = base_prompt
+        if len(selected_chars_data) > 1:
+            # Умное добавление тега о количестве персонажей
+            # (можно заменить на более сложную логику, если нужно)
+            current_base_prompt = f"{len(selected_chars_data)}girls, " + base_prompt
+            
+        positive_parts = [current_base_prompt] + final_mandatory_tags + list(current_tags_set)
         positive_prompt = ", ".join(filter(None, positive_parts))
 
-        # --- Собираем NEGATIVE prompt ---
-        negative_tags_set = all_optional_tags - current_tags_set
+        negative_tags_set = all_optional_tags_set - current_tags_set
         negative_prompt = ", ".join(sorted(list(negative_tags_set)))
         
         generated_prompts.append((positive_prompt, negative_prompt))
         
     return generated_prompts
+
+def save_character_data(data: Dict[str, Any]):
+    """Сохраняет данные о персонажах в JSON-файл."""
+    # Сохраняем в правильной структуре с главным ключом "characters"
+    full_db = {"characters": data}
+    with open(DATA_FILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(full_db, f, ensure_ascii=False, indent=2)
